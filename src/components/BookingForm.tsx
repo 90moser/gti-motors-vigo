@@ -1,15 +1,22 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { supabase } from "@/lib/supabase";
-import { BookingFormFields, SERVICES, VEHICLES, HOURS } from "./BookingFormFields";
+import { supabase } from "@/lib/supabaseClient";
+import {
+  BookingFormFields,
+  SERVICES,
+  VEHICLES,
+  HOURS,
+  type FormValues,
+} from "./BookingFormFields";
 
 const today = new Date().toISOString().split("T")[0];
 
-const defaultForm = {
+const defaultForm: FormValues = {
   nombre: "",
   telefono: "",
+  email: "",
   servicio: SERVICES[0],
-  vehiculo: VEHICLES[0],
+  tipo_vehiculo: VEHICLES[0].value,
   fecha: "",
   hora: HOURS[0],
   notas: "",
@@ -17,9 +24,10 @@ const defaultForm = {
 
 export function BookingForm() {
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState(defaultForm);
+  const [form, setForm] = useState<FormValues>(defaultForm);
 
-  const update = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
+  const update = (k: keyof FormValues, v: string) =>
+    setForm((f) => ({ ...f, [k]: v }));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,41 +38,85 @@ export function BookingForm() {
     setLoading(true);
     try {
       // 1. buscar o crear cliente por teléfono
-      let clienteId: string | number | null = null;
-      const { data: existing } = await supabase
+      const { data: clienteExistente } = await supabase
         .from("clientes")
         .select("id")
         .eq("telefono", form.telefono.trim())
-        .maybeSingle();
+        .single();
 
-      if (existing?.id) {
-        clienteId = existing.id;
+      let clienteId: string | number;
+      if (clienteExistente) {
+        clienteId = clienteExistente.id;
       } else {
-        const { data: created, error: ce } = await supabase
+        const parts = form.nombre.trim().split(" ");
+        const { data: novoCliente, error: ce } = await supabase
           .from("clientes")
-          .insert({ nombre: form.nombre.trim(), telefono: form.telefono.trim() })
+          .insert({
+            nombre: parts[0],
+            apellidos: parts.slice(1).join(" ") || "Sin apellido",
+            telefono: form.telefono.trim(),
+            email: form.email.trim() || null,
+          })
           .select("id")
           .single();
         if (ce) throw ce;
-        clienteId = created?.id ?? null;
+        clienteId = novoCliente!.id;
       }
 
-      // 2. buscar servicio por nombre
-      const { data: srv } = await supabase
+      // 2. buscar servicio y precios por nombre
+      const { data: servicio, error: se } = await supabase
         .from("servicios")
-        .select("id")
-        .ilike("nombre", form.servicio)
-        .maybeSingle();
-      const servicioId = srv?.id ?? null;
+        .select("id, precio_turismo, precio_suv, precio_monovolumen, precio_furgoneta")
+        .eq("nombre", form.servicio)
+        .single();
+      if (se) throw se;
 
-      // 3. insertar cita con estado='espera'
+      // 3. calcular precio según tipo vehículo
+      const precioMap: Record<string, number | null> = {
+        turismo: servicio.precio_turismo,
+        suv: servicio.precio_suv,
+        monovolumen: servicio.precio_monovolumen,
+        furgoneta: servicio.precio_furgoneta,
+      };
+      const precio = precioMap[form.tipo_vehiculo] ?? servicio.precio_turismo;
+
+      // 4. buscar o crear vehículo placeholder por matrícula
+      const matriculaPlaceholder = `LANDING-${form.telefono.trim().slice(-4)}`;
+      const { data: vehiculoExistente } = await supabase
+        .from("vehiculos")
+        .select("id")
+        .eq("matricula", matriculaPlaceholder)
+        .single();
+
+      let vehiculoId: string | number;
+      if (vehiculoExistente) {
+        vehiculoId = vehiculoExistente.id;
+      } else {
+        const { data: novoVehiculo, error: ve } = await supabase
+          .from("vehiculos")
+          .insert({
+            cliente_id: clienteId,
+            matricula: matriculaPlaceholder,
+            marca: "Por confirmar",
+            modelo: "Por confirmar",
+            tipo: form.tipo_vehiculo,
+          })
+          .select("id")
+          .single();
+        if (ve) throw ve;
+        vehiculoId = novoVehiculo!.id;
+      }
+
+      // 5. insertar cita con estado='espera'
       const { error: ie } = await supabase.from("citas").insert({
         cliente_id: clienteId,
-        servicio_id: servicioId,
+        vehiculo_id: vehiculoId,
+        servicio_id: servicio.id,
         fecha: form.fecha,
         hora: form.hora,
-        notas: `${form.vehiculo}${form.notas ? " · " + form.notas : ""}`,
         estado: "espera",
+        precio_final: precio,
+        notas: form.notas.trim() || null,
       });
       if (ie) throw ie;
 
