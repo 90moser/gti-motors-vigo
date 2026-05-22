@@ -38,41 +38,38 @@ export function BookingForm() {
     setLoading(true);
     try {
       // 1. buscar o crear cliente por teléfono
-      const { data: clienteExistente } = await supabase
+      const { data: clientes } = await supabase
         .from("clientes")
         .select("id")
         .eq("telefono", form.telefono.trim())
-        .single();
+        .limit(1);
 
-      let clienteId: string | number;
-      if (clienteExistente) {
-        clienteId = clienteExistente.id;
+      let clienteId: string;
+      if (clientes && clientes.length > 0) {
+        clienteId = clientes[0].id;
       } else {
-        const parts = form.nombre.trim().split(" ");
-        const { data: novoCliente, error: ce } = await supabase
+        const partes = form.nombre.trim().split(" ");
+        const nombre = partes[0];
+        const apellidos = partes.slice(1).join(" ") || "Sin apellido";
+        const { data: nuevo, error: errCliente } = await supabase
           .from("clientes")
-          .insert({
-            nombre: parts[0],
-            apellidos: parts.slice(1).join(" ") || "Sin apellido",
-            telefono: form.telefono.trim(),
-            email: form.email.trim() || null,
-          })
+          .insert({ nombre, apellidos, telefono: form.telefono.trim() })
           .select("id")
           .single();
-        if (ce) throw ce;
-        clienteId = novoCliente!.id;
+        if (errCliente) throw errCliente;
+        clienteId = nuevo!.id;
       }
 
       // 2. buscar servicio y precios por nombre
-      const { data: servicio, error: se } = await supabase
+      const { data: servicio, error: errServicio } = await supabase
         .from("servicios")
         .select("id, precio_turismo, precio_suv, precio_monovolumen, precio_furgoneta")
         .eq("nombre", form.servicio)
         .single();
-      if (se) throw se;
+      if (errServicio) throw errServicio;
 
-      // 3. calcular precio según tipo vehículo
-      const precioMap: Record<string, number | null> = {
+      // 3. precio según tipo vehículo
+      const precioMap: Record<string, number> = {
         turismo: servicio.precio_turismo,
         suv: servicio.precio_suv,
         monovolumen: servicio.precio_monovolumen,
@@ -80,35 +77,35 @@ export function BookingForm() {
       };
       const precio = precioMap[form.tipo_vehiculo] ?? servicio.precio_turismo;
 
-      // 4. buscar o crear vehículo placeholder por matrícula
-      const matriculaPlaceholder = `LANDING-${form.telefono.trim().slice(-4)}`;
-      const { data: vehiculoExistente } = await supabase
+      // 4. vehículo placeholder para citas desde landing
+      const matricula = `WEB-${form.telefono.replace(/\D/g, "").slice(-6)}`;
+      const { data: vehiculos } = await supabase
         .from("vehiculos")
         .select("id")
-        .eq("matricula", matriculaPlaceholder)
-        .single();
+        .eq("matricula", matricula)
+        .limit(1);
 
-      let vehiculoId: string | number;
-      if (vehiculoExistente) {
-        vehiculoId = vehiculoExistente.id;
+      let vehiculoId: string;
+      if (vehiculos && vehiculos.length > 0) {
+        vehiculoId = vehiculos[0].id;
       } else {
-        const { data: novoVehiculo, error: ve } = await supabase
+        const { data: nuevoV, error: errV } = await supabase
           .from("vehiculos")
           .insert({
             cliente_id: clienteId,
-            matricula: matriculaPlaceholder,
+            matricula,
             marca: "Por confirmar",
             modelo: "Por confirmar",
-            tipo: form.tipo_vehiculo,
+            tipo: form.tipo_vehiculo || "turismo",
           })
           .select("id")
           .single();
-        if (ve) throw ve;
-        vehiculoId = novoVehiculo!.id;
+        if (errV) throw errV;
+        vehiculoId = nuevoV!.id;
       }
 
-      // 5. insertar cita con estado='espera'
-      const { error: ie } = await supabase.from("citas").insert({
+      // 5. insertar cita
+      const { error: errCita } = await supabase.from("citas").insert({
         cliente_id: clienteId,
         vehiculo_id: vehiculoId,
         servicio_id: servicio.id,
@@ -116,15 +113,15 @@ export function BookingForm() {
         hora: form.hora,
         estado: "espera",
         precio_final: precio,
-        notas: form.notas.trim() || null,
+        notas: form.notas || null,
       });
-      if (ie) throw ie;
+      if (errCita) throw errCita;
 
-      toast.success("¡Cita solicitada! Te confirmaremos por WhatsApp.");
+      toast.success("¡Cita solicitada! Te confirmaremos por WhatsApp en breve.");
       setForm(defaultForm);
-    } catch (err: any) {
+    } catch (err) {
       console.error(err);
-      toast.error("No se pudo enviar la cita. Llámanos al 698 191 512.");
+      toast.error("Error al enviar la solicitud. Inténtalo de nuevo.");
     } finally {
       setLoading(false);
     }
