@@ -42,8 +42,7 @@ export function Contact() {
               href="https://wa.me/34698191512"
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-3 px-6 py-3.5 rounded-md font-semibold text-white transition hover:opacity-90"
-              style={{ backgroundColor: "#25D366" }}
+              className="inline-flex items-center gap-3 px-6 py-3.5 rounded-md font-semibold text-white transition hover:opacity-90 bg-[#25D366]"
             >
               <WhatsAppIcon className="w-5 h-5" />
               Escríbenos por WhatsApp
