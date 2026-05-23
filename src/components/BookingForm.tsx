@@ -1,15 +1,22 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { supabase } from "@/lib/supabase";
-import { BookingFormFields, SERVICES, VEHICLES, HOURS } from "./BookingFormFields";
+import { supabase } from "@/lib/supabaseClient";
+import {
+  BookingFormFields,
+  SERVICES,
+  VEHICLES,
+  HOURS,
+  type FormValues,
+} from "./BookingFormFields";
 
 const today = new Date().toISOString().split("T")[0];
 
-const defaultForm = {
+const defaultForm: FormValues = {
   nombre: "",
   telefono: "",
+  email: "",
   servicio: SERVICES[0],
-  vehiculo: VEHICLES[0],
+  tipo_vehiculo: VEHICLES[0].value,
   fecha: "",
   hora: HOURS[0],
   notas: "",
@@ -17,9 +24,65 @@ const defaultForm = {
 
 export function BookingForm() {
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState(defaultForm);
+  const [form, setForm] = useState<FormValues>(defaultForm);
+  const [isSabado, setIsSabado] = useState(false);
+  const [horasOcupadas, setHorasOcupadas] = useState<string[]>([]);
 
-  const update = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
+  const update = (k: keyof FormValues, v: string) =>
+    setForm((f) => ({ ...f, [k]: v }));
+
+  const fetchHorasOcupadas = async (fecha: string) => {
+    try {
+      const { data } = await supabase
+        .from("citas")
+        .select("hora")
+        .eq("fecha", fecha)
+        .neq("estado", "cancelado");
+      const ocupadas = (data ?? []).map((c) => String(c.hora).substring(0, 5));
+      setHorasOcupadas(ocupadas);
+    } catch {
+      setHorasOcupadas([]);
+    }
+  };
+
+  const handleFechaChange = (val: string) => {
+    if (!val) {
+      update("fecha", "");
+      setIsSabado(false);
+      setHorasOcupadas([]);
+      return;
+    }
+    const date = new Date(val + "T12:00:00");
+    const day = date.getDay();
+    if (day === 0) {
+      toast.error(
+        "Lo sentimos, los domingos estamos cerrados. Horario: Lun-Vie 9:00-19:00 · Sáb 9:00-12:00"
+      );
+      update("fecha", "");
+      setIsSabado(false);
+      setHorasOcupadas([]);
+      return;
+    }
+    const esSabado = day === 6;
+    setIsSabado(esSabado);
+    update("fecha", val);
+    if (esSabado) update("hora", "09:00");
+    fetchHorasOcupadas(val);
+  };
+
+  // Si la hora seleccionada queda ocupada al cambiar de fecha, resetear a la primera libre
+  const horasDisponibles = isSabado ? HOURS.filter((h) => h <= "12:00") : HOURS;
+
+  useEffect(() => {
+    if (!horasOcupadas.length) return;
+    if (horasOcupadas.includes(form.hora)) {
+      const primeiraLivre = horasDisponibles.find(
+        (h) => !horasOcupadas.includes(h)
+      );
+      if (primeiraLivre) update("hora", primeiraLivre);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [horasOcupadas]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,49 +93,97 @@ export function BookingForm() {
     setLoading(true);
     try {
       // 1. buscar o crear cliente por teléfono
-      let clienteId: string | number | null = null;
-      const { data: existing } = await supabase
+      const { data: clientes } = await supabase
         .from("clientes")
         .select("id")
         .eq("telefono", form.telefono.trim())
-        .maybeSingle();
+        .limit(1);
 
-      if (existing?.id) {
-        clienteId = existing.id;
+      let clienteId: string;
+      if (clientes && clientes.length > 0) {
+        clienteId = clientes[0].id;
       } else {
-        const { data: created, error: ce } = await supabase
+        const partes = form.nombre.trim().split(" ");
+        const nombre = partes[0];
+        const apellidos = partes.slice(1).join(" ") || "Sin apellido";
+        const { data: nuevo, error: errCliente } = await supabase
           .from("clientes")
-          .insert({ nombre: form.nombre.trim(), telefono: form.telefono.trim() })
+          .insert({
+            nombre,
+            apellidos,
+            telefono: form.telefono.trim(),
+            email: form.email?.trim() || null,
+          })
           .select("id")
           .single();
-        if (ce) throw ce;
-        clienteId = created?.id ?? null;
+        if (errCliente) throw errCliente;
+        clienteId = nuevo!.id;
       }
 
-      // 2. buscar servicio por nombre
-      const { data: srv } = await supabase
+      // 2. buscar servicio y precios por nombre
+      const { data: servicio, error: errServicio } = await supabase
         .from("servicios")
-        .select("id")
-        .ilike("nombre", form.servicio)
-        .maybeSingle();
-      const servicioId = srv?.id ?? null;
+        .select("id, precio_turismo, precio_suv, precio_monovolumen, precio_furgoneta")
+        .eq("nombre", form.servicio)
+        .single();
+      if (errServicio) throw errServicio;
 
-      // 3. insertar cita con estado='espera'
-      const { error: ie } = await supabase.from("citas").insert({
+      // 3. precio según tipo vehículo
+      const precioMap: Record<string, number> = {
+        turismo: servicio.precio_turismo,
+        suv: servicio.precio_suv,
+        monovolumen: servicio.precio_monovolumen,
+        furgoneta: servicio.precio_furgoneta,
+      };
+      const precio = precioMap[form.tipo_vehiculo] ?? servicio.precio_turismo;
+
+      // 4. vehículo placeholder para citas desde landing
+      const matricula = `WEB-${form.telefono.replace(/\D/g, "").slice(-6)}`;
+      const { data: vehiculos } = await supabase
+        .from("vehiculos")
+        .select("id")
+        .eq("matricula", matricula)
+        .limit(1);
+
+      let vehiculoId: string;
+      if (vehiculos && vehiculos.length > 0) {
+        vehiculoId = vehiculos[0].id;
+      } else {
+        const { data: nuevoV, error: errV } = await supabase
+          .from("vehiculos")
+          .insert({
+            cliente_id: clienteId,
+            matricula,
+            marca: "Por confirmar",
+            modelo: "Por confirmar",
+            tipo: form.tipo_vehiculo || "turismo",
+          })
+          .select("id")
+          .single();
+        if (errV) throw errV;
+        vehiculoId = nuevoV!.id;
+      }
+
+      // 5. insertar cita
+      const { error: errCita } = await supabase.from("citas").insert({
         cliente_id: clienteId,
-        servicio_id: servicioId,
+        vehiculo_id: vehiculoId,
+        servicio_id: servicio.id,
         fecha: form.fecha,
         hora: form.hora,
-        notas: `${form.vehiculo}${form.notas ? " · " + form.notas : ""}`,
         estado: "espera",
+        precio_final: precio,
+        notas: form.notas || null,
       });
-      if (ie) throw ie;
+      if (errCita) throw errCita;
 
-      toast.success("¡Cita solicitada! Te confirmaremos por WhatsApp.");
+      toast.success("¡Cita solicitada! Te confirmaremos por WhatsApp en breve.");
       setForm(defaultForm);
-    } catch (err: any) {
+      setIsSabado(false);
+      setHorasOcupadas([]);
+    } catch (err) {
       console.error(err);
-      toast.error("No se pudo enviar la cita. Llámanos al 698 191 512.");
+      toast.error("Error al enviar la solicitud. Inténtalo de nuevo.");
     } finally {
       setLoading(false);
     }
@@ -83,7 +194,14 @@ export function BookingForm() {
       onSubmit={handleSubmit}
       className="mt-12 p-8 rounded-2xl bg-card border border-border space-y-5"
     >
-      <BookingFormFields form={form} update={update} today={today} />
+      <BookingFormFields
+        form={form}
+        update={update}
+        today={today}
+        isSabado={isSabado}
+        horasOcupadas={horasOcupadas}
+        onFechaChange={handleFechaChange}
+      />
       <button
         type="submit"
         disabled={loading}

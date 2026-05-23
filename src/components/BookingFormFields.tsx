@@ -1,7 +1,7 @@
-const inputCls =
+export const inputCls =
   "w-full px-4 py-3 rounded-md bg-input border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary transition";
 
-const SERVICES = [
+export const SERVICES = [
   "Lavado Express",
   "Lavado Completo",
   "Lavado Premium",
@@ -11,9 +11,14 @@ const SERVICES = [
   "Mecánica",
 ];
 
-const VEHICLES = ["Turismo", "SUV", "Monovolumen", "Furgoneta"];
+export const VEHICLES = [
+  { value: "turismo", label: "Turismo" },
+  { value: "suv", label: "SUV" },
+  { value: "monovolumen", label: "Monovolumen" },
+  { value: "furgoneta", label: "Furgoneta" },
+];
 
-const HOURS = (() => {
+export const HOURS = (() => {
   const out: string[] = [];
   for (let h = 9; h <= 18; h++) {
     out.push(`${String(h).padStart(2, "0")}:00`);
@@ -22,23 +27,38 @@ const HOURS = (() => {
   return out;
 })();
 
-export { SERVICES, VEHICLES, HOURS };
-
-type Props = {
-  form: {
-    nombre: string;
-    telefono: string;
-    servicio: string;
-    vehiculo: string;
-    fecha: string;
-    hora: string;
-    notas: string;
-  };
-  update: (k: string, v: string) => void;
-  today: string;
+export type FormValues = {
+  nombre: string;
+  telefono: string;
+  email: string;
+  servicio: string;
+  tipo_vehiculo: string;
+  fecha: string;
+  hora: string;
+  notas: string;
 };
 
-export function BookingFormFields({ form, update, today }: Props) {
+type Props = {
+  form: FormValues;
+  update: (k: keyof FormValues, v: string) => void;
+  today: string;
+  isSabado: boolean;
+  horasOcupadas: string[];
+  onFechaChange: (val: string) => void;
+};
+
+export function BookingFormFields({
+  form,
+  update,
+  today,
+  isSabado,
+  horasOcupadas,
+  onFechaChange,
+}: Props) {
+  const horasDisponibles = isSabado
+    ? HOURS.filter((h) => h <= "12:00")
+    : HOURS;
+
   return (
     <>
       <div className="grid md:grid-cols-2 gap-5">
@@ -51,7 +71,7 @@ export function BookingFormFields({ form, update, today }: Props) {
             value={form.nombre}
             onChange={(e) => update("nombre", e.target.value)}
             className={inputCls}
-            placeholder="Tu nombre"
+            placeholder="Tu nombre y apellidos"
           />
         </div>
         <div>
@@ -65,6 +85,18 @@ export function BookingFormFields({ form, update, today }: Props) {
             onChange={(e) => update("telefono", e.target.value)}
             className={inputCls}
             placeholder="698 191 512"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium mb-2">
+            Email (opcional)
+          </label>
+          <input
+            type="email"
+            value={form.email}
+            onChange={(e) => update("email", e.target.value)}
+            className={inputCls}
+            placeholder="tu@email.com"
           />
         </div>
         <div>
@@ -84,12 +116,14 @@ export function BookingFormFields({ form, update, today }: Props) {
             Tipo de vehículo
           </label>
           <select
-            value={form.vehiculo}
-            onChange={(e) => update("vehiculo", e.target.value)}
+            value={form.tipo_vehiculo}
+            onChange={(e) => update("tipo_vehiculo", e.target.value)}
             className={inputCls}
           >
             {VEHICLES.map((v) => (
-              <option key={v}>{v}</option>
+              <option key={v.value} value={v.value}>
+                {v.label}
+              </option>
             ))}
           </select>
         </div>
@@ -102,21 +136,29 @@ export function BookingFormFields({ form, update, today }: Props) {
             type="date"
             min={today}
             value={form.fecha}
-            onChange={(e) => update("fecha", e.target.value)}
+            onChange={(e) => onFechaChange(e.target.value)}
             className={inputCls}
           />
         </div>
         <div>
           <label className="block text-sm font-medium mb-2">
             Hora preferida
+            {isSabado && (
+              <span className="ml-2 text-xs text-muted-foreground font-normal">
+                (Sáb: hasta 12:00)
+              </span>
+            )}
           </label>
           <select
             value={form.hora}
             onChange={(e) => update("hora", e.target.value)}
             className={inputCls}
           >
-            {HOURS.map((h) => (
-              <option key={h}>{h}</option>
+            {horasDisponibles.map((h) => (
+              <option key={h} value={h} disabled={horasOcupadas.includes(h)}>
+                {h}
+                {horasOcupadas.includes(h) ? " — Ocupado" : ""}
+              </option>
             ))}
           </select>
         </div>
