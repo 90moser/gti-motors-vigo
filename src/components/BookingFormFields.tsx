@@ -42,9 +42,23 @@ type Props = {
   form: FormValues;
   update: (k: keyof FormValues, v: string) => void;
   today: string;
+  isSabado: boolean;
+  horasOcupadas: string[];
+  onFechaChange: (val: string) => void;
 };
 
-export function BookingFormFields({ form, update, today }: Props) {
+export function BookingFormFields({
+  form,
+  update,
+  today,
+  isSabado,
+  horasOcupadas,
+  onFechaChange,
+}: Props) {
+  const horasDisponibles = isSabado
+    ? HOURS.filter((h) => h <= "12:00")
+    : HOURS;
+
   return (
     <>
       <div className="grid md:grid-cols-2 gap-5">
@@ -122,21 +136,29 @@ export function BookingFormFields({ form, update, today }: Props) {
             type="date"
             min={today}
             value={form.fecha}
-            onChange={(e) => update("fecha", e.target.value)}
+            onChange={(e) => onFechaChange(e.target.value)}
             className={inputCls}
           />
         </div>
         <div>
           <label className="block text-sm font-medium mb-2">
             Hora preferida
+            {isSabado && (
+              <span className="ml-2 text-xs text-muted-foreground font-normal">
+                (Sáb: hasta 12:00)
+              </span>
+            )}
           </label>
           <select
             value={form.hora}
             onChange={(e) => update("hora", e.target.value)}
             className={inputCls}
           >
-            {HOURS.map((h) => (
-              <option key={h}>{h}</option>
+            {horasDisponibles.map((h) => (
+              <option key={h} value={h} disabled={horasOcupadas.includes(h)}>
+                {h}
+                {horasOcupadas.includes(h) ? " — Ocupado" : ""}
+              </option>
             ))}
           </select>
         </div>

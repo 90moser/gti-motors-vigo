@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabaseClient";
 import {
@@ -25,9 +25,64 @@ const defaultForm: FormValues = {
 export function BookingForm() {
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState<FormValues>(defaultForm);
+  const [isSabado, setIsSabado] = useState(false);
+  const [horasOcupadas, setHorasOcupadas] = useState<string[]>([]);
 
   const update = (k: keyof FormValues, v: string) =>
     setForm((f) => ({ ...f, [k]: v }));
+
+  const fetchHorasOcupadas = async (fecha: string) => {
+    try {
+      const { data } = await supabase
+        .from("citas")
+        .select("hora")
+        .eq("fecha", fecha)
+        .neq("estado", "cancelado");
+      const ocupadas = (data ?? []).map((c) => String(c.hora).substring(0, 5));
+      setHorasOcupadas(ocupadas);
+    } catch {
+      setHorasOcupadas([]);
+    }
+  };
+
+  const handleFechaChange = (val: string) => {
+    if (!val) {
+      update("fecha", "");
+      setIsSabado(false);
+      setHorasOcupadas([]);
+      return;
+    }
+    const date = new Date(val + "T12:00:00");
+    const day = date.getDay();
+    if (day === 0) {
+      toast.error(
+        "Lo sentimos, los domingos estamos cerrados. Horario: Lun-Vie 9:00-19:00 · Sáb 9:00-12:00"
+      );
+      update("fecha", "");
+      setIsSabado(false);
+      setHorasOcupadas([]);
+      return;
+    }
+    const esSabado = day === 6;
+    setIsSabado(esSabado);
+    update("fecha", val);
+    if (esSabado) update("hora", "09:00");
+    fetchHorasOcupadas(val);
+  };
+
+  // Si la hora seleccionada queda ocupada al cambiar de fecha, resetear a la primera libre
+  const horasDisponibles = isSabado ? HOURS.filter((h) => h <= "12:00") : HOURS;
+
+  useEffect(() => {
+    if (!horasOcupadas.length) return;
+    if (horasOcupadas.includes(form.hora)) {
+      const primeiraLivre = horasDisponibles.find(
+        (h) => !horasOcupadas.includes(h)
+      );
+      if (primeiraLivre) update("hora", primeiraLivre);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [horasOcupadas]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,7 +108,12 @@ export function BookingForm() {
         const apellidos = partes.slice(1).join(" ") || "Sin apellido";
         const { data: nuevo, error: errCliente } = await supabase
           .from("clientes")
-          .insert({ nombre, apellidos, telefono: form.telefono.trim() })
+          .insert({
+            nombre,
+            apellidos,
+            telefono: form.telefono.trim(),
+            email: form.email?.trim() || null,
+          })
           .select("id")
           .single();
         if (errCliente) throw errCliente;
@@ -119,6 +179,8 @@ export function BookingForm() {
 
       toast.success("¡Cita solicitada! Te confirmaremos por WhatsApp en breve.");
       setForm(defaultForm);
+      setIsSabado(false);
+      setHorasOcupadas([]);
     } catch (err) {
       console.error(err);
       toast.error("Error al enviar la solicitud. Inténtalo de nuevo.");
@@ -132,7 +194,14 @@ export function BookingForm() {
       onSubmit={handleSubmit}
       className="mt-12 p-8 rounded-2xl bg-card border border-border space-y-5"
     >
-      <BookingFormFields form={form} update={update} today={today} />
+      <BookingFormFields
+        form={form}
+        update={update}
+        today={today}
+        isSabado={isSabado}
+        horasOcupadas={horasOcupadas}
+        onFechaChange={handleFechaChange}
+      />
       <button
         type="submit"
         disabled={loading}
