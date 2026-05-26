@@ -3,12 +3,13 @@ const stats = [
   ["+150", "Coches al mes"],
   ["3", "Profesionales"],
   ["4.9 ⭐", "Valoración Google"],
+  ["+200", "Reseñas Google"],
 ];
 
 export function Stats() {
   return (
     <section className="py-20 px-6 bg-primary">
-      <div className="max-w-6xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-8">
+      <div className="max-w-6xl mx-auto grid grid-cols-2 md:grid-cols-5 gap-8">
         {stats.map(([n, l]) => (
           <div key={l} className="text-center">
             <div className="text-4xl md:text-5xl font-extrabold text-primary-foreground">

@@ -7,8 +7,8 @@ export function About() {
         <div className="relative">
           <div className="absolute -inset-4 bg-primary/20 blur-3xl rounded-full" />
           <img
-            src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=800"
-            alt="Equipo GTIMotors trabajando"
+            src="https://images.unsplash.com/photo-1625047509168-a7026f36de04?w=800"
+            alt="Andrés Felipe, fundador de GTIMotors, trabajando"
             className="relative w-full rounded-xl border border-border shadow-2xl object-cover aspect-[4/5]"
             loading="lazy"
           />
