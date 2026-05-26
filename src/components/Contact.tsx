@@ -17,12 +17,8 @@ export function Contact() {
               36205 Vigo (Pontevedra)
             </Row>
             <Row icon={<Phone />} title="Teléfono">
-              <a href="tel:+34986137576" className="hover:text-primary">
-                986 13 75 76
-              </a>{" "}
-              ·{" "}
-              <a href="tel:+34698191512" className="hover:text-primary">
-                698 191 512
+              <a href="tel:+34665058633" className="hover:text-primary">
+                +34 665 058 633
               </a>
             </Row>
             <Row icon={<Mail />} title="Email">
@@ -39,7 +35,7 @@ export function Contact() {
               Sáb 9:00-14:00 · Dom Cerrado
             </Row>
             <a
-              href="https://wa.me/34698191512"
+              href="https://wa.me/34665058633"
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center gap-3 px-6 py-3.5 rounded-md font-semibold text-white transition hover:opacity-90 bg-[#25D366]"

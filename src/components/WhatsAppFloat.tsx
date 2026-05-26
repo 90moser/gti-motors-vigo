@@ -10,7 +10,7 @@ export function WhatsAppFloat() {
   if (!show) return null;
   return (
     <a
-      href="https://wa.me/34698191512?text=Hola%20GTIMotors%2C%20quiero%20información"
+      href="https://wa.me/34665058633?text=Hola%20GTIMotors%2C%20quiero%20información"
       target="_blank"
       rel="noreferrer"
       aria-label="WhatsApp"

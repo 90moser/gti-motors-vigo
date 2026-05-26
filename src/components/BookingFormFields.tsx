@@ -84,7 +84,7 @@ export function BookingFormFields({
             value={form.telefono}
             onChange={(e) => update("telefono", e.target.value)}
             className={inputCls}
-            placeholder="698 191 512"
+            placeholder="665 058 633"
           />
         </div>
         <div>
