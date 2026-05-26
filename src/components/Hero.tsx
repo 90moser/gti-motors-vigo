@@ -1,8 +1,8 @@
 export function Hero() {
   return (
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
-      <div className="absolute inset-0 bg-cover bg-center bg-[url('https://i.imgur.com/3v0oQy6.jpeg')]" />
-      <div className="absolute inset-0 bg-gradient-to-b from-black/75 via-black/65 to-black" />
+      <div className="absolute inset-0 bg-cover bg-center bg-[url('https://i.imgur.com/EAyCc7S.png')]" />
+      <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-black/65 to-black" />
 
       <div className="relative z-10 max-w-5xl mx-auto px-6 text-center pt-24 pb-16">
         <span className="inline-block px-3 py-1 rounded-full bg-primary/20 border border-primary/40 text-primary text-xs font-semibold tracking-wide animate-fade-in">
