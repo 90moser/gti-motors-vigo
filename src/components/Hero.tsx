@@ -1,7 +1,7 @@
 export function Hero() {
   return (
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
-      <div className="absolute inset-0 bg-cover bg-center bg-[url('https://images.unsplash.com/photo-1607860108855-64acf2078ed9?w=1920')]" />
+      <div className="absolute inset-0 bg-cover bg-center bg-[url('https://i.imgur.com/3v0oQy6.jpeg')]" />
       <div className="absolute inset-0 bg-gradient-to-b from-black/75 via-black/65 to-black" />
 
       <div className="relative z-10 max-w-5xl mx-auto px-6 text-center pt-24 pb-16">
