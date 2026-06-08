@@ -2,6 +2,7 @@ import { Toaster } from 'sonner';
 import { Navbar } from '@/components/Navbar';
 import { Hero } from '@/components/Hero';
 import { Services } from '@/components/Services';
+import { BeforeAfter } from '@/components/BeforeAfter';
 import { About } from '@/components/About';
 import { Stats } from '@/components/Stats';
 import { Reviews } from '@/components/Reviews';
@@ -19,6 +20,7 @@ export default function App() {
       <main>
         <Hero />
         <Services />
+        <BeforeAfter />
         <About />
         <Stats />
         <Reviews />
