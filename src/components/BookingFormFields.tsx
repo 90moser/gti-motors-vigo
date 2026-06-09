@@ -43,7 +43,8 @@ type Props = {
   update: (k: keyof FormValues, v: string) => void;
   today: string;
   isSabado: boolean;
-  horasOcupadas: string[];
+  horasConteo: Record<string, number>;
+  loadingSlots: boolean;
   onFechaChange: (val: string) => void;
 };
 
@@ -52,7 +53,8 @@ export function BookingFormFields({
   update,
   today,
   isSabado,
-  horasOcupadas,
+  horasConteo,
+  loadingSlots,
   onFechaChange,
 }: Props) {
   const horasDisponibles = isSabado
@@ -140,29 +142,67 @@ export function BookingFormFields({
             className={inputCls}
           />
         </div>
-        <div>
-          <label className="block text-sm font-medium mb-2">
-            Hora preferida
-            {isSabado && (
-              <span className="ml-2 text-xs text-muted-foreground font-normal">
-                (Sáb: hasta 12:00)
-              </span>
-            )}
-          </label>
-          <select
-            value={form.hora}
-            onChange={(e) => update("hora", e.target.value)}
-            className={inputCls}
-          >
-            {horasDisponibles.map((h) => (
-              <option key={h} value={h} disabled={horasOcupadas.includes(h)}>
-                {h}
-                {horasOcupadas.includes(h) ? " — Ocupado" : ""}
-              </option>
-            ))}
-          </select>
-        </div>
       </div>
+
+      {/* Hours picker */}
+      <div>
+        <label className="block text-sm font-medium mb-2">
+          Hora preferida
+          {isSabado && (
+            <span className="ml-2 text-xs text-muted-foreground font-normal">
+              (Sáb: hasta 12:00)
+            </span>
+          )}
+        </label>
+
+        {!form.fecha ? (
+          <p className="text-sm text-muted-foreground py-3">
+            Selecciona una fecha para ver los horarios disponibles.
+          </p>
+        ) : loadingSlots ? (
+          <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
+            {Array.from({ length: 10 }).map((_, i) => (
+              <div
+                key={i}
+                className="h-11 rounded-md bg-muted/40 animate-pulse"
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
+            {horasDisponibles.map((h) => {
+              const count = horasConteo[h] ?? 0;
+              const bloqueado = count >= 2;
+              const seleccionado = form.hora === h;
+              return (
+                <button
+                  key={h}
+                  type="button"
+                  disabled={bloqueado}
+                  onClick={() => update("hora", h)}
+                  title={bloqueado ? "No disponible" : h}
+                  className={[
+                    "flex flex-col items-center justify-center gap-0.5 px-2 py-2 rounded-md text-sm font-medium transition select-none",
+                    bloqueado
+                      ? "bg-muted/40 text-muted-foreground line-through cursor-not-allowed"
+                      : seleccionado
+                      ? "bg-primary text-primary-foreground shadow-md shadow-primary/30 ring-2 ring-primary/60"
+                      : "bg-input border border-border text-foreground hover:border-primary hover:bg-card cursor-pointer",
+                  ].join(" ")}
+                >
+                  <span>{h}</span>
+                  {bloqueado && (
+                    <span className="text-[10px] leading-none not-italic">
+                      No disponible
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       <div>
         <label className="block text-sm font-medium mb-2">
           Notas (opcional)

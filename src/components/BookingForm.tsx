@@ -24,24 +24,32 @@ const defaultForm: FormValues = {
 
 export function BookingForm() {
   const [loading, setLoading] = useState(false);
+  const [loadingSlots, setLoadingSlots] = useState(false);
   const [form, setForm] = useState<FormValues>(defaultForm);
   const [isSabado, setIsSabado] = useState(false);
-  const [horasOcupadas, setHorasOcupadas] = useState<string[]>([]);
+  const [horasConteo, setHorasConteo] = useState<Record<string, number>>({});
 
   const update = (k: keyof FormValues, v: string) =>
     setForm((f) => ({ ...f, [k]: v }));
 
   const fetchHorasOcupadas = async (fecha: string) => {
+    setLoadingSlots(true);
     try {
       const { data } = await supabase
         .from("citas")
         .select("hora")
         .eq("fecha", fecha)
         .neq("estado", "cancelado");
-      const ocupadas = (data ?? []).map((c) => String(c.hora).substring(0, 5));
-      setHorasOcupadas(ocupadas);
+      const conteo: Record<string, number> = {};
+      (data ?? []).forEach((c) => {
+        const h = String(c.hora).substring(0, 5);
+        conteo[h] = (conteo[h] ?? 0) + 1;
+      });
+      setHorasConteo(conteo);
     } catch {
-      setHorasOcupadas([]);
+      setHorasConteo({});
+    } finally {
+      setLoadingSlots(false);
     }
   };
 
@@ -49,7 +57,7 @@ export function BookingForm() {
     if (!val) {
       update("fecha", "");
       setIsSabado(false);
-      setHorasOcupadas([]);
+      setHorasConteo({});
       return;
     }
     const date = new Date(val + "T12:00:00");
@@ -60,7 +68,7 @@ export function BookingForm() {
       );
       update("fecha", "");
       setIsSabado(false);
-      setHorasOcupadas([]);
+      setHorasConteo({});
       return;
     }
     const esSabado = day === 6;
@@ -70,19 +78,19 @@ export function BookingForm() {
     fetchHorasOcupadas(val);
   };
 
-  // Si la hora seleccionada queda ocupada al cambiar de fecha, resetear a la primera libre
+  // Si la hora seleccionada queda completa al cambiar de fecha, resetear a la primera libre
   const horasDisponibles = isSabado ? HOURS.filter((h) => h <= "12:00") : HOURS;
 
   useEffect(() => {
-    if (!horasOcupadas.length) return;
-    if (horasOcupadas.includes(form.hora)) {
+    if (!Object.keys(horasConteo).length) return;
+    if ((horasConteo[form.hora] ?? 0) >= 2) {
       const primeiraLivre = horasDisponibles.find(
-        (h) => !horasOcupadas.includes(h)
+        (h) => (horasConteo[h] ?? 0) < 2
       );
       if (primeiraLivre) update("hora", primeiraLivre);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [horasOcupadas]);
+  }, [horasConteo]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -180,7 +188,7 @@ export function BookingForm() {
       toast.success("¡Cita solicitada! Te confirmaremos por WhatsApp en breve.");
       setForm(defaultForm);
       setIsSabado(false);
-      setHorasOcupadas([]);
+      setHorasConteo({});
     } catch (err) {
       console.error(err);
       toast.error("Error al enviar la solicitud. Inténtalo de nuevo.");
@@ -199,7 +207,8 @@ export function BookingForm() {
         update={update}
         today={today}
         isSabado={isSabado}
-        horasOcupadas={horasOcupadas}
+        horasConteo={horasConteo}
+        loadingSlots={loadingSlots}
         onFechaChange={handleFechaChange}
       />
       <button
