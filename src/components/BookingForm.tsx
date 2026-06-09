@@ -172,7 +172,26 @@ export function BookingForm() {
         vehiculoId = nuevoV!.id;
       }
 
-      // 5. insertar cita
+      // 5. verificar capacidad en tiempo real antes de insertar
+      const { data: citasHora } = await supabase
+        .from("citas")
+        .select("hora")
+        .eq("fecha", form.fecha)
+        .neq("estado", "cancelado");
+
+      const countHora = (citasHora ?? []).filter(
+        (c) => String(c.hora).substring(0, 5) === form.hora
+      ).length;
+
+      if (countHora >= 2) {
+        toast.error(
+          "Este horario ya está completo. Por favor elige otro horario."
+        );
+        void fetchHorasOcupadas(form.fecha);
+        return;
+      }
+
+      // 6. insertar cita
       const { error: errCita } = await supabase.from("citas").insert({
         cliente_id: clienteId,
         vehiculo_id: vehiculoId,
@@ -186,9 +205,11 @@ export function BookingForm() {
       if (errCita) throw errCita;
 
       toast.success("¡Cita solicitada! Te confirmaremos por WhatsApp en breve.");
+      const fechaReservada = form.fecha;
       setForm(defaultForm);
       setIsSabado(false);
-      setHorasConteo({});
+      // Refrescar conteo para que otros slots se actualicen si alguien sigue en la página
+      void fetchHorasOcupadas(fechaReservada);
     } catch (err) {
       console.error(err);
       toast.error("Error al enviar la solicitud. Inténtalo de nuevo.");

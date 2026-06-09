@@ -184,7 +184,7 @@ export function BookingFormFields({
                   className={[
                     "flex flex-col items-center justify-center gap-0.5 px-2 py-2 rounded-md text-sm font-medium transition select-none",
                     bloqueado
-                      ? "bg-muted/40 text-muted-foreground line-through cursor-not-allowed"
+                      ? "bg-muted/30 text-muted-foreground line-through cursor-not-allowed opacity-40 pointer-events-none"
                       : seleccionado
                       ? "bg-primary text-primary-foreground shadow-md shadow-primary/30 ring-2 ring-primary/60"
                       : "bg-input border border-border text-foreground hover:border-primary hover:bg-card cursor-pointer",
@@ -192,7 +192,7 @@ export function BookingFormFields({
                 >
                   <span>{h}</span>
                   {bloqueado && (
-                    <span className="text-[10px] leading-none not-italic">
+                    <span className="text-[10px] leading-none text-primary font-semibold not-italic">
                       No disponible
                     </span>
                   )}
