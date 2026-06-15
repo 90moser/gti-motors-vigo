@@ -11,6 +11,9 @@ import {
 
 const today = new Date().toISOString().split("T")[0];
 
+// 0=domingo, 1=lunes, 6=sábado → cerrado para reservas online
+const DIA_CERRADO = new Set([0, 1, 6]);
+
 const defaultForm: FormValues = {
   nombre: "",
   telefono: "",
@@ -26,7 +29,7 @@ export function BookingForm() {
   const [loading, setLoading] = useState(false);
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [form, setForm] = useState<FormValues>(defaultForm);
-  const [isSabado, setIsSabado] = useState(false);
+  const [diaCerrado, setDiaCerrado] = useState(false);
   const [horasConteo, setHorasConteo] = useState<Record<string, number>>({});
 
   const update = (k: keyof FormValues, v: string) =>
@@ -56,37 +59,31 @@ export function BookingForm() {
   const handleFechaChange = (val: string) => {
     if (!val) {
       update("fecha", "");
-      setIsSabado(false);
+      setDiaCerrado(false);
       setHorasConteo({});
       return;
     }
     const date = new Date(val + "T12:00:00");
     const day = date.getDay();
-    if (day === 0) {
-      toast.error(
-        "Lo sentimos, los domingos estamos cerrados. Horario: Lun-Vie 9:00-19:00 · Sáb 9:00-12:00"
-      );
-      update("fecha", "");
-      setIsSabado(false);
+
+    if (DIA_CERRADO.has(day)) {
+      // Mantener la fecha visible pero marcar el día como cerrado
+      update("fecha", val);
+      setDiaCerrado(true);
       setHorasConteo({});
       return;
     }
-    const esSabado = day === 6;
-    setIsSabado(esSabado);
+
+    setDiaCerrado(false);
     update("fecha", val);
-    if (esSabado) update("hora", "09:00");
     fetchHorasOcupadas(val);
   };
 
   // Si la hora seleccionada queda completa al cambiar de fecha, resetear a la primera libre
-  const horasDisponibles = isSabado ? HOURS.filter((h) => h <= "12:00") : HOURS;
-
   useEffect(() => {
     if (!Object.keys(horasConteo).length) return;
     if ((horasConteo[form.hora] ?? 0) >= 2) {
-      const primeiraLivre = horasDisponibles.find(
-        (h) => (horasConteo[h] ?? 0) < 2
-      );
+      const primeiraLivre = HOURS.find((h) => (horasConteo[h] ?? 0) < 2);
       if (primeiraLivre) update("hora", primeiraLivre);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -96,6 +93,10 @@ export function BookingForm() {
     e.preventDefault();
     if (!form.telefono.trim() || !form.nombre.trim() || !form.fecha) {
       toast.error("Por favor completa los campos obligatorios");
+      return;
+    }
+    if (diaCerrado) {
+      toast.error("No hay citas disponibles para este día");
       return;
     }
     setLoading(true);
@@ -207,8 +208,7 @@ export function BookingForm() {
       toast.success("¡Cita solicitada! Te confirmaremos por WhatsApp en breve.");
       const fechaReservada = form.fecha;
       setForm(defaultForm);
-      setIsSabado(false);
-      // Refrescar conteo para que otros slots se actualicen si alguien sigue en la página
+      setDiaCerrado(false);
       void fetchHorasOcupadas(fechaReservada);
     } catch (err) {
       console.error(err);
@@ -227,14 +227,14 @@ export function BookingForm() {
         form={form}
         update={update}
         today={today}
-        isSabado={isSabado}
+        diaCerrado={diaCerrado}
         horasConteo={horasConteo}
         loadingSlots={loadingSlots}
         onFechaChange={handleFechaChange}
       />
       <button
         type="submit"
-        disabled={loading}
+        disabled={loading || diaCerrado}
         className="w-full py-4 rounded-md bg-primary text-primary-foreground font-bold text-lg hover:bg-primary/90 transition disabled:opacity-60 shadow-lg shadow-primary/30"
       >
         {loading ? "Enviando..." : "Solicitar Cita →"}

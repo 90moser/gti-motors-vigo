@@ -18,14 +18,12 @@ export const VEHICLES = [
   { value: "furgoneta", label: "Furgoneta" },
 ];
 
-export const HOURS = (() => {
-  const out: string[] = [];
-  for (let h = 9; h <= 18; h++) {
-    out.push(`${String(h).padStart(2, "0")}:00`);
-    out.push(`${String(h).padStart(2, "0")}:30`);
-  }
-  return out;
-})();
+// Martes–Viernes: mañana 08:00–12:30, tarde 16:00–18:30
+export const HOURS = [
+  "08:00", "08:30", "09:00", "09:30", "10:00", "10:30",
+  "11:00", "11:30", "12:00", "12:30",
+  "16:00", "16:30", "17:00", "17:30", "18:00", "18:30",
+];
 
 export type FormValues = {
   nombre: string;
@@ -42,7 +40,7 @@ type Props = {
   form: FormValues;
   update: (k: keyof FormValues, v: string) => void;
   today: string;
-  isSabado: boolean;
+  diaCerrado: boolean;
   horasConteo: Record<string, number>;
   loadingSlots: boolean;
   onFechaChange: (val: string) => void;
@@ -52,15 +50,11 @@ export function BookingFormFields({
   form,
   update,
   today,
-  isSabado,
+  diaCerrado,
   horasConteo,
   loadingSlots,
   onFechaChange,
 }: Props) {
-  const horasDisponibles = isSabado
-    ? HOURS.filter((h) => h <= "12:00")
-    : HOURS;
-
   return (
     <>
       <div className="grid md:grid-cols-2 gap-5">
@@ -141,6 +135,9 @@ export function BookingFormFields({
             onChange={(e) => onFechaChange(e.target.value)}
             className={inputCls}
           />
+          <p className="mt-1.5 text-xs text-muted-foreground">
+            Disponible de martes a viernes
+          </p>
         </div>
       </div>
 
@@ -148,20 +145,19 @@ export function BookingFormFields({
       <div>
         <label className="block text-sm font-medium mb-2">
           Hora preferida
-          {isSabado && (
-            <span className="ml-2 text-xs text-muted-foreground font-normal">
-              (Sáb: hasta 12:00)
-            </span>
-          )}
         </label>
 
         {!form.fecha ? (
           <p className="text-sm text-muted-foreground py-3">
             Selecciona una fecha para ver los horarios disponibles.
           </p>
+        ) : diaCerrado ? (
+          <p className="text-sm text-muted-foreground py-3">
+            No hay citas disponibles para este día.
+          </p>
         ) : loadingSlots ? (
-          <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
-            {Array.from({ length: 10 }).map((_, i) => (
+          <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+            {Array.from({ length: 12 }).map((_, i) => (
               <div
                 key={i}
                 className="h-11 rounded-md bg-muted/40 animate-pulse"
@@ -169,8 +165,8 @@ export function BookingFormFields({
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
-            {horasDisponibles.map((h) => {
+          <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+            {HOURS.map((h) => {
               const count = horasConteo[h] ?? 0;
               const bloqueado = count >= 2;
               const seleccionado = form.hora === h;
