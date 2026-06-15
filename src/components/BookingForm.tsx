@@ -11,8 +11,8 @@ import {
 
 const today = new Date().toISOString().split("T")[0];
 
-// 0=domingo, 1=lunes, 6=sábado → cerrado para reservas online
-const DIA_CERRADO = new Set([0, 1, 6]);
+const DIA_CERRADO = new Set([0]);    // Domingo: sin slots, mensaje
+const DIA_RESERVADO = new Set([1, 6]); // Lunes, Sábado: slots visibles pero todos bloqueados
 
 const defaultForm: FormValues = {
   nombre: "",
@@ -30,6 +30,7 @@ export function BookingForm() {
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [form, setForm] = useState<FormValues>(defaultForm);
   const [diaCerrado, setDiaCerrado] = useState(false);
+  const [slotsBloqueados, setSlotsBloqueados] = useState(false);
   const [horasConteo, setHorasConteo] = useState<Record<string, number>>({});
 
   const update = (k: keyof FormValues, v: string) =>
@@ -60,6 +61,7 @@ export function BookingForm() {
     if (!val) {
       update("fecha", "");
       setDiaCerrado(false);
+      setSlotsBloqueados(false);
       setHorasConteo({});
       return;
     }
@@ -67,14 +69,28 @@ export function BookingForm() {
     const day = date.getDay();
 
     if (DIA_CERRADO.has(day)) {
-      // Mantener la fecha visible pero marcar el día como cerrado
+      // Domingo: cerrado, sin slots, mostrar mensaje
       update("fecha", val);
       setDiaCerrado(true);
+      setSlotsBloqueados(false);
       setHorasConteo({});
       return;
     }
 
+    if (DIA_RESERVADO.has(day)) {
+      // Lunes/Sábado: mostrar todos los slots pero bloqueados (reservado corporativo)
+      update("fecha", val);
+      setDiaCerrado(false);
+      setSlotsBloqueados(true);
+      const conteoLleno: Record<string, number> = {};
+      HOURS.forEach((h) => { conteoLleno[h] = 2; });
+      setHorasConteo(conteoLleno);
+      return;
+    }
+
+    // Martes–Viernes: slots normales, consultar ocupación real
     setDiaCerrado(false);
+    setSlotsBloqueados(false);
     update("fecha", val);
     fetchHorasOcupadas(val);
   };
@@ -95,7 +111,7 @@ export function BookingForm() {
       toast.error("Por favor completa los campos obligatorios");
       return;
     }
-    if (diaCerrado) {
+    if (diaCerrado || slotsBloqueados) {
       toast.error("No hay citas disponibles para este día");
       return;
     }
@@ -209,6 +225,7 @@ export function BookingForm() {
       const fechaReservada = form.fecha;
       setForm(defaultForm);
       setDiaCerrado(false);
+      setSlotsBloqueados(false);
       void fetchHorasOcupadas(fechaReservada);
     } catch (err) {
       console.error(err);
@@ -234,7 +251,7 @@ export function BookingForm() {
       />
       <button
         type="submit"
-        disabled={loading || diaCerrado}
+        disabled={loading || diaCerrado || slotsBloqueados}
         className="w-full py-4 rounded-md bg-primary text-primary-foreground font-bold text-lg hover:bg-primary/90 transition disabled:opacity-60 shadow-lg shadow-primary/30"
       >
         {loading ? "Enviando..." : "Solicitar Cita →"}
