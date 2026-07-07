@@ -168,7 +168,7 @@ export function BookingFormFields({
           <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
             {HOURS.map((h) => {
               const count = horasConteo[h] ?? 0;
-              const bloqueado = count >= 2;
+              const bloqueado = count >= 1;
               const seleccionado = form.hora === h;
               return (
                 <button

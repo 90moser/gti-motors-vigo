@@ -11,8 +11,8 @@ import {
 
 const today = new Date().toISOString().split("T")[0];
 
-const DIA_CERRADO = new Set([0]);    // Domingo: sin slots, mensaje
-const DIA_RESERVADO = new Set([1, 6]); // Lunes, Sábado: slots visibles pero todos bloqueados
+const DIA_CERRADO = new Set([0]);      // Domingo: sin slots, mensaje
+const DIA_RESERVADO = new Set([1, 6]); // Lunes, Sábado: slots visibles pero bloqueados
 
 const defaultForm: FormValues = {
   nombre: "",
@@ -69,7 +69,6 @@ export function BookingForm() {
     const day = date.getDay();
 
     if (DIA_CERRADO.has(day)) {
-      // Domingo: cerrado, sin slots, mostrar mensaje
       update("fecha", val);
       setDiaCerrado(true);
       setSlotsBloqueados(false);
@@ -78,28 +77,25 @@ export function BookingForm() {
     }
 
     if (DIA_RESERVADO.has(day)) {
-      // Lunes/Sábado: mostrar todos los slots pero bloqueados (reservado corporativo)
       update("fecha", val);
       setDiaCerrado(false);
       setSlotsBloqueados(true);
       const conteoLleno: Record<string, number> = {};
-      HOURS.forEach((h) => { conteoLleno[h] = 2; });
+      HOURS.forEach((h) => { conteoLleno[h] = 1; });
       setHorasConteo(conteoLleno);
       return;
     }
 
-    // Martes–Viernes: slots normales, consultar ocupación real
     setDiaCerrado(false);
     setSlotsBloqueados(false);
     update("fecha", val);
     fetchHorasOcupadas(val);
   };
 
-  // Si la hora seleccionada queda completa al cambiar de fecha, resetear a la primera libre
   useEffect(() => {
     if (!Object.keys(horasConteo).length) return;
-    if ((horasConteo[form.hora] ?? 0) >= 2) {
-      const primeiraLivre = HOURS.find((h) => (horasConteo[h] ?? 0) < 2);
+    if ((horasConteo[form.hora] ?? 0) >= 1) {
+      const primeiraLivre = HOURS.find((h) => (horasConteo[h] ?? 0) < 1);
       if (primeiraLivre) update("hora", primeiraLivre);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -189,7 +185,7 @@ export function BookingForm() {
         vehiculoId = nuevoV!.id;
       }
 
-      // 5. verificar capacidad en tiempo real antes de insertar
+      // 5. verificar capacidad en tiempo real antes de insertar (máx 1 cita por slot)
       const { data: citasHora } = await supabase
         .from("citas")
         .select("hora")
@@ -200,9 +196,9 @@ export function BookingForm() {
         (c) => String(c.hora).substring(0, 5) === form.hora
       ).length;
 
-      if (countHora >= 2) {
+      if (countHora >= 1) {
         toast.error(
-          "Este horario ya está completo. Por favor elige otro horario."
+          "Este horario ya está ocupado. Por favor elige otro horario."
         );
         void fetchHorasOcupadas(form.fecha);
         return;
