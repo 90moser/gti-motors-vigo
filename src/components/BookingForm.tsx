@@ -11,6 +11,9 @@ import {
 
 const today = new Date().toISOString().split("T")[0];
 
+const DIA_CERRADO = new Set([0]);      // Domingo: sin slots, mensaje
+const DIA_RESERVADO = new Set([1, 6]); // Lunes, Sábado: slots visibles pero bloqueados
+
 const defaultForm: FormValues = {
   nombre: "",
   telefono: "",
@@ -24,70 +27,88 @@ const defaultForm: FormValues = {
 
 export function BookingForm() {
   const [loading, setLoading] = useState(false);
+  const [loadingSlots, setLoadingSlots] = useState(false);
   const [form, setForm] = useState<FormValues>(defaultForm);
-  const [isSabado, setIsSabado] = useState(false);
-  const [horasOcupadas, setHorasOcupadas] = useState<string[]>([]);
+  const [diaCerrado, setDiaCerrado] = useState(false);
+  const [slotsBloqueados, setSlotsBloqueados] = useState(false);
+  const [horasConteo, setHorasConteo] = useState<Record<string, number>>({});
 
   const update = (k: keyof FormValues, v: string) =>
     setForm((f) => ({ ...f, [k]: v }));
 
   const fetchHorasOcupadas = async (fecha: string) => {
+    setLoadingSlots(true);
     try {
       const { data } = await supabase
         .from("citas")
         .select("hora")
         .eq("fecha", fecha)
         .neq("estado", "cancelado");
-      const ocupadas = (data ?? []).map((c) => String(c.hora).substring(0, 5));
-      setHorasOcupadas(ocupadas);
+      const conteo: Record<string, number> = {};
+      (data ?? []).forEach((c) => {
+        const h = String(c.hora).substring(0, 5);
+        conteo[h] = (conteo[h] ?? 0) + 1;
+      });
+      setHorasConteo(conteo);
     } catch {
-      setHorasOcupadas([]);
+      setHorasConteo({});
+    } finally {
+      setLoadingSlots(false);
     }
   };
 
   const handleFechaChange = (val: string) => {
     if (!val) {
       update("fecha", "");
-      setIsSabado(false);
-      setHorasOcupadas([]);
+      setDiaCerrado(false);
+      setSlotsBloqueados(false);
+      setHorasConteo({});
       return;
     }
     const date = new Date(val + "T12:00:00");
     const day = date.getDay();
-    if (day === 0) {
-      toast.error(
-        "Lo sentimos, los domingos estamos cerrados. Horario: Lun-Vie 9:00-19:00 · Sáb 9:00-12:00"
-      );
-      update("fecha", "");
-      setIsSabado(false);
-      setHorasOcupadas([]);
+
+    if (DIA_CERRADO.has(day)) {
+      update("fecha", val);
+      setDiaCerrado(true);
+      setSlotsBloqueados(false);
+      setHorasConteo({});
       return;
     }
-    const esSabado = day === 6;
-    setIsSabado(esSabado);
+
+    if (DIA_RESERVADO.has(day)) {
+      update("fecha", val);
+      setDiaCerrado(false);
+      setSlotsBloqueados(true);
+      const conteoLleno: Record<string, number> = {};
+      HOURS.forEach((h) => { conteoLleno[h] = 1; });
+      setHorasConteo(conteoLleno);
+      return;
+    }
+
+    setDiaCerrado(false);
+    setSlotsBloqueados(false);
     update("fecha", val);
-    if (esSabado) update("hora", "09:00");
     fetchHorasOcupadas(val);
   };
 
-  // Si la hora seleccionada queda ocupada al cambiar de fecha, resetear a la primera libre
-  const horasDisponibles = isSabado ? HOURS.filter((h) => h <= "12:00") : HOURS;
-
   useEffect(() => {
-    if (!horasOcupadas.length) return;
-    if (horasOcupadas.includes(form.hora)) {
-      const primeiraLivre = horasDisponibles.find(
-        (h) => !horasOcupadas.includes(h)
-      );
+    if (!Object.keys(horasConteo).length) return;
+    if ((horasConteo[form.hora] ?? 0) >= 1) {
+      const primeiraLivre = HOURS.find((h) => (horasConteo[h] ?? 0) < 1);
       if (primeiraLivre) update("hora", primeiraLivre);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [horasOcupadas]);
+  }, [horasConteo]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.telefono.trim() || !form.nombre.trim() || !form.fecha) {
       toast.error("Por favor completa los campos obligatorios");
+      return;
+    }
+    if (diaCerrado || slotsBloqueados) {
+      toast.error("No hay citas disponibles para este día");
       return;
     }
     setLoading(true);
@@ -164,7 +185,26 @@ export function BookingForm() {
         vehiculoId = nuevoV!.id;
       }
 
-      // 5. insertar cita
+      // 5. verificar capacidad en tiempo real antes de insertar (máx 1 cita por slot)
+      const { data: citasHora } = await supabase
+        .from("citas")
+        .select("hora")
+        .eq("fecha", form.fecha)
+        .neq("estado", "cancelado");
+
+      const countHora = (citasHora ?? []).filter(
+        (c) => String(c.hora).substring(0, 5) === form.hora
+      ).length;
+
+      if (countHora >= 1) {
+        toast.error(
+          "Este horario ya está ocupado. Por favor elige otro horario."
+        );
+        void fetchHorasOcupadas(form.fecha);
+        return;
+      }
+
+      // 6. insertar cita
       const { error: errCita } = await supabase.from("citas").insert({
         cliente_id: clienteId,
         vehiculo_id: vehiculoId,
@@ -178,9 +218,11 @@ export function BookingForm() {
       if (errCita) throw errCita;
 
       toast.success("¡Cita solicitada! Te confirmaremos por WhatsApp en breve.");
+      const fechaReservada = form.fecha;
       setForm(defaultForm);
-      setIsSabado(false);
-      setHorasOcupadas([]);
+      setDiaCerrado(false);
+      setSlotsBloqueados(false);
+      void fetchHorasOcupadas(fechaReservada);
     } catch (err) {
       console.error(err);
       toast.error("Error al enviar la solicitud. Inténtalo de nuevo.");
@@ -198,13 +240,14 @@ export function BookingForm() {
         form={form}
         update={update}
         today={today}
-        isSabado={isSabado}
-        horasOcupadas={horasOcupadas}
+        diaCerrado={diaCerrado}
+        horasConteo={horasConteo}
+        loadingSlots={loadingSlots}
         onFechaChange={handleFechaChange}
       />
       <button
         type="submit"
-        disabled={loading}
+        disabled={loading || diaCerrado || slotsBloqueados}
         className="w-full py-4 rounded-md bg-primary text-primary-foreground font-bold text-lg hover:bg-primary/90 transition disabled:opacity-60 shadow-lg shadow-primary/30"
       >
         {loading ? "Enviando..." : "Solicitar Cita →"}

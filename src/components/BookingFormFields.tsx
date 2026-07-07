@@ -18,14 +18,12 @@ export const VEHICLES = [
   { value: "furgoneta", label: "Furgoneta" },
 ];
 
-export const HOURS = (() => {
-  const out: string[] = [];
-  for (let h = 9; h <= 18; h++) {
-    out.push(`${String(h).padStart(2, "0")}:00`);
-    out.push(`${String(h).padStart(2, "0")}:30`);
-  }
-  return out;
-})();
+// Martes–Viernes: mañana 08:00–12:30, tarde 16:00–18:30
+export const HOURS = [
+  "08:00", "08:30", "09:00", "09:30", "10:00", "10:30",
+  "11:00", "11:30", "12:00", "12:30",
+  "16:00", "16:30", "17:00", "17:30", "18:00", "18:30",
+];
 
 export type FormValues = {
   nombre: string;
@@ -42,8 +40,9 @@ type Props = {
   form: FormValues;
   update: (k: keyof FormValues, v: string) => void;
   today: string;
-  isSabado: boolean;
-  horasOcupadas: string[];
+  diaCerrado: boolean;
+  horasConteo: Record<string, number>;
+  loadingSlots: boolean;
   onFechaChange: (val: string) => void;
 };
 
@@ -51,14 +50,11 @@ export function BookingFormFields({
   form,
   update,
   today,
-  isSabado,
-  horasOcupadas,
+  diaCerrado,
+  horasConteo,
+  loadingSlots,
   onFechaChange,
 }: Props) {
-  const horasDisponibles = isSabado
-    ? HOURS.filter((h) => h <= "12:00")
-    : HOURS;
-
   return (
     <>
       <div className="grid md:grid-cols-2 gap-5">
@@ -84,7 +80,7 @@ export function BookingFormFields({
             value={form.telefono}
             onChange={(e) => update("telefono", e.target.value)}
             className={inputCls}
-            placeholder="698 191 512"
+            placeholder="665 058 633"
           />
         </div>
         <div>
@@ -139,30 +135,70 @@ export function BookingFormFields({
             onChange={(e) => onFechaChange(e.target.value)}
             className={inputCls}
           />
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-2">
-            Hora preferida
-            {isSabado && (
-              <span className="ml-2 text-xs text-muted-foreground font-normal">
-                (Sáb: hasta 12:00)
-              </span>
-            )}
-          </label>
-          <select
-            value={form.hora}
-            onChange={(e) => update("hora", e.target.value)}
-            className={inputCls}
-          >
-            {horasDisponibles.map((h) => (
-              <option key={h} value={h} disabled={horasOcupadas.includes(h)}>
-                {h}
-                {horasOcupadas.includes(h) ? " — Ocupado" : ""}
-              </option>
-            ))}
-          </select>
+          <p className="mt-1.5 text-xs text-muted-foreground">
+            Disponible de martes a viernes
+          </p>
         </div>
       </div>
+
+      {/* Hours picker */}
+      <div>
+        <label className="block text-sm font-medium mb-2">
+          Hora preferida
+        </label>
+
+        {!form.fecha ? (
+          <p className="text-sm text-muted-foreground py-3">
+            Selecciona una fecha para ver los horarios disponibles.
+          </p>
+        ) : diaCerrado ? (
+          <p className="text-sm text-muted-foreground py-3">
+            No hay citas disponibles para este día.
+          </p>
+        ) : loadingSlots ? (
+          <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+            {Array.from({ length: 12 }).map((_, i) => (
+              <div
+                key={i}
+                className="h-11 rounded-md bg-muted/40 animate-pulse"
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+            {HOURS.map((h) => {
+              const count = horasConteo[h] ?? 0;
+              const bloqueado = count >= 1;
+              const seleccionado = form.hora === h;
+              return (
+                <button
+                  key={h}
+                  type="button"
+                  disabled={bloqueado}
+                  onClick={() => update("hora", h)}
+                  title={bloqueado ? "No disponible" : h}
+                  className={[
+                    "flex flex-col items-center justify-center gap-0.5 px-2 py-2 rounded-md text-sm font-medium transition select-none",
+                    bloqueado
+                      ? "bg-muted/30 text-muted-foreground line-through cursor-not-allowed opacity-40 pointer-events-none"
+                      : seleccionado
+                      ? "bg-primary text-primary-foreground shadow-md shadow-primary/30 ring-2 ring-primary/60"
+                      : "bg-input border border-border text-foreground hover:border-primary hover:bg-card cursor-pointer",
+                  ].join(" ")}
+                >
+                  <span>{h}</span>
+                  {bloqueado && (
+                    <span className="text-[10px] leading-none text-primary font-semibold not-italic">
+                      No disponible
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       <div>
         <label className="block text-sm font-medium mb-2">
           Notas (opcional)
